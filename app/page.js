@@ -3,12 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   CONFIG — Modifie ces deux valeurs
+   CONFIG
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-const WHATSAPP_NUMBER = "33612345678" // Ton numéro WhatsApp (format international sans +)
+const WHATSAPP_NUMBER = "33618565507"
 const STORAGE_KEY = "menu-collector-data"
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 const uid = () => Math.random().toString(36).slice(2, 9)
 
@@ -23,52 +21,13 @@ const DEFAULT_CATEGORIES = ["Entrées", "Plats", "Desserts", "Boissons", "Formul
 
 /* ─── localStorage helpers ─── */
 function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch { return null }
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null } catch { return null }
 }
-
 function saveToStorage(data) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  } catch { /* quota exceeded or private browsing, silent fail */ }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)) } catch {}
 }
-
 function clearStorage() {
   try { localStorage.removeItem(STORAGE_KEY) } catch {}
-}
-
-/* ─── WhatsApp formatter ─── */
-function formatWhatsAppMessage(restaurantName, languages, categories, notes) {
-  let msg = `🍽️ *CARTE — ${restaurantName.toUpperCase()}*\n`
-  msg += `📅 ${new Date().toLocaleDateString("fr-FR")}\n`
-  msg += `🌍 Langues : ${languages.map(l => LANG_META[l].flag).join(" ")}\n\n`
-
-  for (const cat of categories) {
-    if (cat.items.length === 0) continue
-    msg += `━━━━━━━━━━━━━━━\n`
-    msg += `📂 *${cat.name.toUpperCase()}*\n`
-    msg += `━━━━━━━━━━━━━━━\n`
-    for (const item of cat.items) {
-      if (!item.name.fr.trim()) continue
-      const price = item.price ? ` — ${item.price}€` : ""
-      msg += `• ${item.name.fr}${price}\n`
-      if (item.description?.fr?.trim()) {
-        msg += `  _${item.description.fr}_\n`
-      }
-    }
-    msg += `\n`
-  }
-
-  if (notes?.trim()) {
-    msg += `💬 *Remarque :*\n${notes}\n\n`
-  }
-
-  const totalProducts = categories.reduce((s, c) => s + c.items.filter(i => i.name.fr.trim()).length, 0)
-  msg += `───\n`
-  msg += `${categories.filter(c => c.items.length > 0).length} catégories · ${totalProducts} produits`
-  return msg
 }
 
 /* ─── Components ─── */
@@ -199,12 +158,13 @@ function ProductRow({ item, onUpdate, onRemove, onDuplicate, index, onEnterNext,
   )
 }
 
+/* ─── Category Tabs: WRAP instead of scroll ─── */
 function CategoryTabs({ categories, activeId, onChange }) {
   return (
-    <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, WebkitOverflowScrolling: "touch", scrollbarWidth: "none" }}>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingBottom: 8 }}>
       {categories.map(c => (
         <button key={c.id} onClick={() => onChange(c.id)} style={{
-          padding: "8px 16px", borderRadius: 50, whiteSpace: "nowrap",
+          padding: "8px 16px", borderRadius: 50,
           background: c.id === activeId ? "var(--bg-accent)" : "var(--bg-card)",
           color: c.id === activeId ? "#fff" : "var(--text-secondary)",
           border: `1.5px solid ${c.id === activeId ? "var(--bg-accent)" : "var(--border)"}`,
@@ -240,10 +200,11 @@ export default function MenuCollector() {
   const [activeCatId, setActiveCatId] = useState(null)
   const [newCatName, setNewCatName] = useState("")
   const [loaded, setLoaded] = useState(false)
+  const [sending, setSending] = useState(false)
   const newCatRef = useRef(null)
   const saveTimeout = useRef(null)
 
-  /* ─── Load saved state on mount ─── */
+  /* ─── Load ─── */
   useEffect(() => {
     const saved = loadState()
     if (saved) {
@@ -257,7 +218,7 @@ export default function MenuCollector() {
     setLoaded(true)
   }, [])
 
-  /* ─── Autosave on every change (debounced 400ms) ─── */
+  /* ─── Autosave ─── */
   const doSave = useCallback(() => {
     if (!loaded) return
     clearTimeout(saveTimeout.current)
@@ -268,25 +229,33 @@ export default function MenuCollector() {
 
   useEffect(() => { doSave() }, [doSave])
 
-  /* ─── Submit via WhatsApp ─── */
-  const handleSubmit = () => {
-    const msg = formatWhatsAppMessage(restaurantName, languages, categories, notes)
-    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`
+  /* ─── Submit: send PDF via email + WhatsApp notification ─── */
+  const handleSubmit = async () => {
+    setSending(true)
+    try {
+      // Send data to API route → generates PDF → emails it
+      await fetch('/api/send-menu', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurantName, languages, categories, notes }),
+      })
+    } catch (e) {
+      console.error('Send error:', e)
+    }
+
+    // Open WhatsApp with simple confirmation message
+    const msg = `Le formulaire est envoyé ! 😊`
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`, "_blank")
+
     clearStorage()
+    setSending(false)
     setSubmitted(true)
-    window.open(url, "_blank")
   }
 
   /* ─── Reset ─── */
   const handleReset = () => {
     clearStorage()
-    setStep(0)
-    setRestaurantName("")
-    setLanguages(["fr"])
-    setCategories([])
-    setNotes("")
-    setActiveCatId(null)
-    setSubmitted(false)
+    setStep(0); setRestaurantName(""); setLanguages(["fr"]); setCategories([]); setNotes(""); setActiveCatId(null); setSubmitted(false)
   }
 
   const toggleLang = (code) => setLanguages(prev => prev.includes(code) ? prev.filter(l => l !== code) : [...prev, code])
@@ -346,7 +315,6 @@ export default function MenuCollector() {
     if (step === 2 && categories.length > 0 && !activeCatId) setActiveCatId(categories[0].id)
   }, [step, categories])
 
-  /* ─── Loading ─── */
   if (!loaded) {
     return (
       <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)" }}>
@@ -355,14 +323,13 @@ export default function MenuCollector() {
     )
   }
 
-  /* ─── Submitted ─── */
   if (submitted) {
     return (
       <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 40, background: "var(--bg)", textAlign: "center" }}>
         <div style={{ width: 80, height: 80, borderRadius: "50%", background: "var(--success-light)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 24, animation: "checkPop 0.4s ease forwards" }}>✓</div>
         <div style={{ fontFamily: "var(--font-display)", fontSize: 28, fontWeight: 600, marginBottom: 8 }}>Menu envoyé !</div>
         <div style={{ fontSize: 15, color: "var(--text-secondary)", lineHeight: 1.5, maxWidth: 300, marginBottom: 32 }}>
-          Merci ! Votre carte a été transmise via WhatsApp. Nous revenons vers vous très rapidement.
+          Merci ! Votre carte a été transmise. Nous revenons vers vous très rapidement.
         </div>
         <button onClick={handleReset} style={{
           padding: "12px 24px", background: "none", border: "1.5px solid var(--border)",
@@ -373,36 +340,23 @@ export default function MenuCollector() {
     )
   }
 
-  /* ─── Steps ─── */
   return (
     <>
       {/* Step 0: Restaurant + Languages */}
       {step === 0 && (
-        <StepLayout step={0} totalSteps={5} title="Votre carte"
-          subtitle="Commençons par les bases"
-          onNext={() => setStep(1)} nextLabel="Suivant →"
-          nextDisabled={!restaurantName.trim()}>
-
+        <StepLayout step={0} totalSteps={5} title="Votre carte" subtitle="Commençons par les bases"
+          onNext={() => setStep(1)} nextLabel="Suivant →" nextDisabled={!restaurantName.trim()}>
           <div style={{ marginTop: 16, marginBottom: 28 }}>
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: "0.05em" }}>
               Nom du restaurant
             </label>
-            <input value={restaurantName}
-              onChange={(e) => setRestaurantName(e.target.value)}
-              placeholder="Ex : Le Petit Bistrot"
-              autoFocus
-              style={{
-                width: "100%", padding: "14px 16px",
-                border: "2px solid var(--border)", borderRadius: "var(--radius-sm)",
-                fontSize: 17, fontWeight: 600, fontFamily: "var(--font-body)",
-                outline: "none", background: "var(--bg-card)", color: "var(--text)",
-                transition: "var(--transition)",
-              }}
+            <input value={restaurantName} onChange={(e) => setRestaurantName(e.target.value)}
+              placeholder="Ex : Le Petit Bistrot" autoFocus
+              style={{ width: "100%", padding: "14px 16px", border: "2px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 17, fontWeight: 600, fontFamily: "var(--font-body)", outline: "none", background: "var(--bg-card)", color: "var(--text)", transition: "var(--transition)" }}
               onFocus={(e) => e.target.style.borderColor = "var(--accent)"}
               onBlur={(e) => e.target.style.borderColor = "var(--border)"}
             />
           </div>
-
           <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-secondary)", marginBottom: 6, display: "block", textTransform: "uppercase", letterSpacing: "0.05em" }}>
             Langues de la carte
           </label>
@@ -509,13 +463,15 @@ export default function MenuCollector() {
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 32, paddingBottom: 32 }}>
             <button onClick={() => setStep(0)} style={{ flex: 1, padding: 14, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-sm)", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)", color: "var(--text)" }}>Modifier</button>
-            <button onClick={handleSubmit} style={{
-              flex: 2, padding: 14, background: "#25D366", border: "none",
-              borderRadius: "var(--radius-sm)", fontSize: 15, fontWeight: 700, cursor: "pointer",
+            <button onClick={handleSubmit} disabled={sending} style={{
+              flex: 2, padding: 14,
+              background: sending ? "var(--border)" : "#25D366",
+              border: "none", borderRadius: "var(--radius-sm)", fontSize: 15, fontWeight: 700,
+              cursor: sending ? "default" : "pointer",
               fontFamily: "var(--font-body)", color: "#fff", boxShadow: "var(--shadow-md)",
               display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
             }}>
-              Envoyer via WhatsApp
+              {sending ? "Envoi en cours…" : "Envoyer ma carte ✓"}
             </button>
           </div>
         </StepLayout>
