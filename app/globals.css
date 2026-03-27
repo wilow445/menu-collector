@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,700&display=swap');
+
+:root {
+  --bg: #FAF8F5;
+  --bg-card: #FFFFFF;
+  --bg-subtle: #F3F0EB;
+  --bg-accent: #1B1B1B;
+  --text: #1B1B1B;
+  --text-secondary: #7A7368;
+  --text-muted: #B5AFA6;
+  --accent: #C4652E;
+  --accent-light: #F5E6DB;
+  --border: #E8E4DD;
+  --success: #4A7C59;
+  --success-light: #E8F2EB;
+  --danger: #C44E3D;
+  --shadow-md: 0 4px 16px rgba(27,27,27,0.06);
+  --radius-sm: 10px;
+  --radius-xs: 8px;
+  --font-body: 'DM Sans', sans-serif;
+  --font-display: 'Fraunces', serif;
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+body { font-family: var(--font-body); background: var(--bg); color: var(--text); }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes checkPop { 0% { transform: scale(0); } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }
