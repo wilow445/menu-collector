@@ -2,7 +2,7 @@
 
 Interface web mobile-first pour collecter les cartes de restaurants.
 Le client remplit → tu reçois un message WhatsApp structuré.
-
+ 
 ## Setup
 
 ### 1. Configure ton numéro WhatsApp
